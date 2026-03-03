@@ -187,12 +187,40 @@ YAML
 
 # ============================================================
 # init ヘルパー: サービス名を環境変数名に変換
-# 例: "Anthropic" -> "ANTHROPIC_API_KEY_REAL"
-#     "my service" -> "MY_SERVICE_API_KEY_REAL"
+# エイリアスにより "Claude" "claude-code" なども ANTHROPIC_API_KEY_REAL に正規化される
 # ============================================================
 _name_to_env_var() {
   local name="$1"
-  printf '%s' "$name" | tr 'a-z' 'A-Z' | tr -cs 'A-Z0-9' '_' | sed 's/^_*//' | sed 's/_*$//' | awk '{print $0"_API_KEY_REAL"}'
+  # まず大文字に正規化
+  local upper
+  upper=$(printf '%s' "$name" | tr 'a-z' 'A-Z' | tr -cs 'A-Z0-9' '_' | sed 's/^_*//' | sed 's/_*$//')
+
+  # エイリアス解決: よく使われる別名を正規の変数名にマッピング
+  case "$upper" in
+    CLAUDE|CLAUDE_CODE|CLAUDECODE|CLAUDE_AI|ANTHROPIC_CLAUDE)
+      echo "ANTHROPIC_API_KEY_REAL"; return ;;
+    CHATGPT|CHAT_GPT|GPT|GPT4|GPT_4|GPT4O|GPT_4O)
+      echo "OPENAI_API_KEY_REAL"; return ;;
+    GEMINI|GOOGLE_GEMINI|GOOGLE_AI|BARD)
+      echo "GOOGLE_API_KEY_REAL"; return ;;
+    GROK|XAI_GROK)
+      echo "XAI_API_KEY_REAL"; return ;;
+    MISTRAL_LARGE|MISTRAL_SMALL|CODESTRAL)
+      echo "MISTRAL_API_KEY_REAL"; return ;;
+    COMMAND|COMMAND_R|COHERE_AI)
+      echo "COHERE_API_KEY_REAL"; return ;;
+    DEEPSEEK_CHAT|DEEPSEEK_CODER|DEEPSEEK_R1)
+      echo "DEEPSEEK_API_KEY_REAL"; return ;;
+    LLAMA|LLAMA3|MIXTRAL|GROQ_AI)
+      echo "GROQ_API_KEY_REAL"; return ;;
+    PPLX|PERPLEXITY_AI|SONAR)
+      echo "PERPLEXITY_API_KEY_REAL"; return ;;
+    TOGETHER|TOGETHER_AI|TOGETHERAI)
+      echo "TOGETHER_API_KEY_REAL"; return ;;
+  esac
+
+  # エイリアスにない場合はそのまま変換
+  echo "${upper}_API_KEY_REAL"
 }
 
 # 登録済みAPIキーを番号付きで表示（作業用tmpファイルから読む）
