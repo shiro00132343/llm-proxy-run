@@ -131,7 +131,7 @@ generate_litellm_config() {
   for svc in "${SERVICES[@]}"; do
     local env_var
     env_var=$(svc_env "$svc")
-    if [ -n "${!env_var:-}" ]; then
+    if [ -n "$(eval "echo \"\${${env_var}:-}\"")" ]; then
       any_key=1
       break
     fi
@@ -152,7 +152,8 @@ YAML
   for svc in "${SERVICES[@]}"; do
     local env_var
     env_var=$(svc_env "$svc")
-    local api_key="${!env_var:-}"
+    local api_key
+    api_key="$(eval "echo \"\${${env_var}:-}\"")"
     [ -z "$api_key" ] && continue
 
     local models_str
@@ -216,7 +217,8 @@ cmd_init() {
     env_var=$(svc_env "$svc")
     name=$(svc_name "$svc")
     example=$(svc_example "$svc")
-    local current_val="${!env_var:-}"
+    local current_val
+    current_val="$(eval "echo \"\${${env_var}:-}\"")"
 
     echo -e "${BOLD}${name}${RESET}"
     if [ -n "$current_val" ]; then
@@ -386,7 +388,8 @@ cmd_status() {
       local env_var name
       env_var=$(svc_env "$svc")
       name=$(svc_name "$svc")
-      local val="${!env_var:-}"
+      local val
+      val="$(eval "echo \"\${${env_var}:-}\"")"
       if [ -n "$val" ]; then
         local masked="${val:0:8}...${val: -4}"
         printf "  %-28s %s\n" "${name}:" "$masked"
@@ -438,7 +441,8 @@ cmd_services() {
     env_var=$(svc_env "$svc")
     name=$(svc_name "$svc")
     models_str=$(svc_models "$svc")
-    local val="${!env_var:-}"
+    local val
+    val="$(eval "echo \"\${${env_var}:-}\"")"
 
     # モデル数を数える
     local model_count
@@ -453,6 +457,38 @@ cmd_services() {
 
   echo ""
   info "キーを追加・変更するには: llm-proxy init"
+}
+
+# ============================================================
+# コマンド: update
+# ============================================================
+cmd_update() {
+  local repo="shiro00132343/llm-proxy-run"
+  local install_path
+  install_path="$(command -v llm-proxy)"
+
+  info "最新版を確認中..."
+
+  # GitHub APIでHEADのSHAを取得（CDNキャッシュを回避）
+  local sha
+  sha=$(curl -fsSL "https://api.github.com/repos/${repo}/commits/main" 2>/dev/null \
+    | grep '"sha"' | head -1 \
+    | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
+
+  if [ -z "$sha" ]; then
+    error "GitHubへの接続に失敗しました。ネットワークを確認してください。"
+    exit 1
+  fi
+
+  local url="https://raw.githubusercontent.com/${repo}/${sha}/llm-proxy"
+  info "ダウンロード中... (${sha:0:7})"
+  curl -fsSL "$url" -o "$install_path"
+  chmod +x "$install_path"
+  success "アップデート完了: $install_path"
+
+  local version
+  version=$(grep '^# llm-proxy' "$install_path" | head -1)
+  [ -n "$version" ] && echo "  $version"
 }
 
 # ============================================================
