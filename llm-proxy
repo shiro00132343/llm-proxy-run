@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # llm-proxy - APIキーを安全にキャッシュして、ローカルプロキシ経由でLLMにアクセスするツール
 # Usage: llm-proxy <command>
 #   init    - APIキーを設定する
