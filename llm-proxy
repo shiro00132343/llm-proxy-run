@@ -39,10 +39,34 @@ error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 header()  { echo -e "\n${BOLD}${CYAN}$*${RESET}"; }
 
 # ============================================================
+# サービス定義
+# 形式: "ENV_VAR_NAME|表示名|キーの例|モデル定義（カンマ区切り: モデル名=litellmパス）"
+#
+# 新しいサービスを追加するにはここに1行足すだけ。
+# ============================================================
+SERVICES=(
+  "ANTHROPIC_API_KEY_REAL|Anthropic (Claude)|sk-ant-...|claude-sonnet=anthropic/claude-3-5-sonnet-20241022,claude-haiku=anthropic/claude-3-5-haiku-20241022,claude-opus=anthropic/claude-3-opus-20240229,claude-3-5-sonnet-20241022=anthropic/claude-3-5-sonnet-20241022,claude-3-5-haiku-20241022=anthropic/claude-3-5-haiku-20241022,claude-sonnet-4-5=anthropic/claude-sonnet-4-5,claude-haiku-4-5-20251001=anthropic/claude-haiku-4-5-20251001,claude-opus-4-6=anthropic/claude-opus-4-6,claude-sonnet-4-6=anthropic/claude-sonnet-4-6"
+  "OPENAI_API_KEY_REAL|OpenAI (GPT)|sk-...|gpt-4o=openai/gpt-4o,gpt-4o-mini=openai/gpt-4o-mini,gpt-4-turbo=openai/gpt-4-turbo,o1=openai/o1,o1-mini=openai/o1-mini,o3-mini=openai/o3-mini"
+  "GOOGLE_API_KEY_REAL|Google (Gemini)|AIza...|gemini-pro=gemini/gemini-1.5-pro,gemini-flash=gemini/gemini-1.5-flash,gemini-2-flash=gemini/gemini-2.0-flash,gemini-2-pro=gemini/gemini-2.0-pro"
+  "XAI_API_KEY_REAL|xAI (Grok)|xai-...|grok-2=xai/grok-2,grok-2-mini=xai/grok-2-mini,grok-beta=xai/grok-beta"
+  "MISTRAL_API_KEY_REAL|Mistral AI|...|mistral-large=mistral/mistral-large-latest,mistral-small=mistral/mistral-small-latest,codestral=mistral/codestral-latest"
+  "COHERE_API_KEY_REAL|Cohere|...|command-r-plus=cohere/command-r-plus,command-r=cohere/command-r,command=cohere/command"
+  "DEEPSEEK_API_KEY_REAL|DeepSeek|sk-...|deepseek-chat=deepseek/deepseek-chat,deepseek-coder=deepseek/deepseek-coder,deepseek-r1=deepseek/deepseek-reasoner"
+  "GROQ_API_KEY_REAL|Groq|gsk_...|llama3-70b=groq/llama3-70b-8192,llama3-8b=groq/llama3-8b-8192,mixtral-8x7b=groq/mixtral-8x7b-32768"
+  "PERPLEXITY_API_KEY_REAL|Perplexity|pplx-...|pplx-sonar-large=perplexity/llama-3.1-sonar-large-128k-online,pplx-sonar-small=perplexity/llama-3.1-sonar-small-128k-online"
+  "TOGETHER_API_KEY_REAL|Together AI|...|llama-3-70b=together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo,llama-3-8b=together_ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+)
+
+# サービス情報を取得するヘルパー
+svc_env()     { echo "${1%%|*}"; }                                      # 環境変数名
+svc_name()    { local s="${1#*|}"; echo "${s%%|*}"; }                  # 表示名
+svc_example() { local s="${1#*|*|}"; echo "${s%%|*}"; }                # キーの例
+svc_models()  { echo "${1##*|}"; }                                      # モデル定義文字列
+
+# ============================================================
 # ヘルパー関数
 # ============================================================
 
-# 設定ディレクトリを初期化（パーミッション700で作成）
 ensure_config_dir() {
   if [ ! -d "$CONFIG_DIR" ]; then
     mkdir -p "$CONFIG_DIR"
@@ -50,7 +74,6 @@ ensure_config_dir() {
   fi
 }
 
-# 設定ファイルを読み込む
 load_config() {
   if [ -f "$CONFIG_FILE" ]; then
     # shellcheck source=/dev/null
@@ -58,7 +81,6 @@ load_config() {
   fi
 }
 
-# LiteLLMがインストールされているか確認
 check_litellm() {
   if ! command -v litellm &>/dev/null; then
     warn "LiteLLMがインストールされていません。"
@@ -84,7 +106,6 @@ check_litellm() {
   fi
 }
 
-# プロキシが起動中か確認
 is_running() {
   if [ -f "$PID_FILE" ]; then
     local pid
@@ -92,7 +113,6 @@ is_running() {
     if kill -0 "$pid" 2>/dev/null; then
       return 0
     else
-      # PIDファイルが残っているが、プロセスが死んでいる
       rm -f "$PID_FILE"
       return 1
     fi
@@ -100,18 +120,28 @@ is_running() {
   return 1
 }
 
-# LiteLLM設定ファイルを生成する
+# ============================================================
+# LiteLLM設定ファイル生成（サービス定義をループで処理）
+# ============================================================
 generate_litellm_config() {
   load_config
 
-  if [ -z "${ANTHROPIC_API_KEY_REAL:-}" ]; then
+  # 1つもキーが設定されていないか確認
+  local any_key=0
+  for svc in "${SERVICES[@]}"; do
+    local env_var
+    env_var=$(svc_env "$svc")
+    if [ -n "${!env_var:-}" ]; then
+      any_key=1
+      break
+    fi
+  done
+
+  if [ "$any_key" -eq 0 ]; then
     error "APIキーが設定されていません。まず 'llm-proxy init' を実行してください。"
     exit 1
   fi
 
-  local port="${PROXY_PORT:-$DEFAULT_PORT}"
-
-  # モデルマッピングを構築
   cat > "$LITELLM_CONFIG" << YAML
 # llm-proxy が自動生成した LiteLLM 設定ファイル
 # このファイルは ~/.llm-proxy/ に保存されており、プロジェクト外のため安全です
@@ -119,78 +149,29 @@ generate_litellm_config() {
 model_list:
 YAML
 
-  # Anthropicキーが設定されている場合
-  if [ -n "${ANTHROPIC_API_KEY_REAL:-}" ]; then
-    cat >> "$LITELLM_CONFIG" << YAML
-  - model_name: claude-sonnet
-    litellm_params:
-      model: anthropic/claude-3-5-sonnet-20241022
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
+  for svc in "${SERVICES[@]}"; do
+    local env_var
+    env_var=$(svc_env "$svc")
+    local api_key="${!env_var:-}"
+    [ -z "$api_key" ] && continue
 
-  - model_name: claude-haiku
-    litellm_params:
-      model: anthropic/claude-3-5-haiku-20241022
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
+    local models_str
+    models_str=$(svc_models "$svc")
 
-  - model_name: claude-opus
+    # カンマ区切りのモデル定義をループ
+    IFS=',' read -ra model_entries <<< "$models_str"
+    for entry in "${model_entries[@]}"; do
+      local model_name="${entry%%=*}"
+      local litellm_model="${entry##*=}"
+      cat >> "$LITELLM_CONFIG" << YAML
+  - model_name: ${model_name}
     litellm_params:
-      model: anthropic/claude-3-opus-20240229
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
-
-  - model_name: claude-3-5-sonnet-20241022
-    litellm_params:
-      model: anthropic/claude-3-5-sonnet-20241022
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
-
-  - model_name: claude-3-5-haiku-20241022
-    litellm_params:
-      model: anthropic/claude-3-5-haiku-20241022
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
-
-  - model_name: claude-opus-4-5
-    litellm_params:
-      model: anthropic/claude-opus-4-5
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
-
-  - model_name: claude-sonnet-4-5
-    litellm_params:
-      model: anthropic/claude-sonnet-4-5
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
-
-  - model_name: claude-haiku-4-5-20251001
-    litellm_params:
-      model: anthropic/claude-haiku-4-5-20251001
-      api_key: "${ANTHROPIC_API_KEY_REAL}"
+      model: ${litellm_model}
+      api_key: "${api_key}"
 
 YAML
-  fi
-
-  # OpenAIキーが設定されている場合
-  if [ -n "${OPENAI_API_KEY_REAL:-}" ]; then
-    cat >> "$LITELLM_CONFIG" << YAML
-  - model_name: gpt-4o
-    litellm_params:
-      model: openai/gpt-4o
-      api_key: "${OPENAI_API_KEY_REAL}"
-
-  - model_name: gpt-4o-mini
-    litellm_params:
-      model: openai/gpt-4o-mini
-      api_key: "${OPENAI_API_KEY_REAL}"
-
-YAML
-  fi
-
-  # Google (Gemini) キーが設定されている場合
-  if [ -n "${GOOGLE_API_KEY_REAL:-}" ]; then
-    cat >> "$LITELLM_CONFIG" << YAML
-  - model_name: gemini-pro
-    litellm_params:
-      model: gemini/gemini-1.5-pro
-      api_key: "${GOOGLE_API_KEY_REAL}"
-
-YAML
-  fi
+    done
+  done
 
   cat >> "$LITELLM_CONFIG" << YAML
 litellm_settings:
@@ -213,7 +194,6 @@ cmd_init() {
   echo ""
 
   ensure_config_dir
-
   load_config
 
   # ポート設定
@@ -223,72 +203,69 @@ cmd_init() {
   local port="${input_port:-$current_port}"
 
   echo ""
-  echo "設定するAPIキーを選択してください（不要なものはそのままEnterでスキップ）"
+  echo "設定するAPIキーを入力してください。"
+  echo "不要なサービスはそのままEnterでスキップできます。"
   echo ""
 
-  # Anthropic
-  echo -e "${BOLD}Anthropic (Claude)${RESET}"
-  if [ -n "${ANTHROPIC_API_KEY_REAL:-}" ]; then
-    local masked="${ANTHROPIC_API_KEY_REAL:0:10}...${ANTHROPIC_API_KEY_REAL: -4}"
-    echo "  現在の値: $masked"
-    echo -n "  新しいキー（変更しない場合はEnter）: "
-  else
-    echo -n "  APIキー（例: sk-ant-...）: "
-  fi
-  read -r -s input_anthropic
-  echo ""
-  local anthropic_key="${input_anthropic:-${ANTHROPIC_API_KEY_REAL:-}}"
+  # 各サービスのキーを収集
+  declare -A new_keys
+  for svc in "${SERVICES[@]}"; do
+    local env_var name example
+    env_var=$(svc_env "$svc")
+    name=$(svc_name "$svc")
+    example=$(svc_example "$svc")
+    local current_val="${!env_var:-}"
 
-  # OpenAI
-  echo -e "${BOLD}OpenAI (GPT)${RESET}"
-  if [ -n "${OPENAI_API_KEY_REAL:-}" ]; then
-    local masked_oai="${OPENAI_API_KEY_REAL:0:7}...${OPENAI_API_KEY_REAL: -4}"
-    echo "  現在の値: $masked_oai"
-    echo -n "  新しいキー（変更しない場合はEnter）: "
-  else
-    echo -n "  APIキー（例: sk-...）[スキップする場合はEnter]: "
-  fi
-  read -r -s input_openai
-  echo ""
-  local openai_key="${input_openai:-${OPENAI_API_KEY_REAL:-}}"
+    echo -e "${BOLD}${name}${RESET}"
+    if [ -n "$current_val" ]; then
+      local masked="${current_val:0:8}...${current_val: -4}"
+      echo "  現在の値: $masked"
+      echo -n "  新しいキー（変更しない場合はEnter）: "
+    else
+      echo -n "  APIキー（例: ${example}）[スキップする場合はEnter]: "
+    fi
+    read -r -s input_key
+    echo ""
+    new_keys["$env_var"]="${input_key:-$current_val}"
+  done
 
-  # Google
-  echo -e "${BOLD}Google (Gemini)${RESET}"
-  if [ -n "${GOOGLE_API_KEY_REAL:-}" ]; then
-    local masked_ggl="${GOOGLE_API_KEY_REAL:0:7}...${GOOGLE_API_KEY_REAL: -4}"
-    echo "  現在の値: $masked_ggl"
-    echo -n "  新しいキー（変更しない場合はEnter）: "
-  else
-    echo -n "  APIキー [スキップする場合はEnter]: "
-  fi
-  read -r -s input_google
-  echo ""
-  local google_key="${input_google:-${GOOGLE_API_KEY_REAL:-}}"
-
-  if [ -z "$anthropic_key" ] && [ -z "$openai_key" ] && [ -z "$google_key" ]; then
+  # 1つも設定されていない場合はエラー
+  local any_set=0
+  for svc in "${SERVICES[@]}"; do
+    local env_var
+    env_var=$(svc_env "$svc")
+    if [ -n "${new_keys[$env_var]:-}" ]; then
+      any_set=1
+      break
+    fi
+  done
+  if [ "$any_set" -eq 0 ]; then
     error "少なくとも1つのAPIキーを設定してください。"
     exit 1
   fi
 
   # 設定ファイルに保存
-  cat > "$CONFIG_FILE" << EOF
-# llm-proxy 設定ファイル
-# このファイルは $CONFIG_DIR に保存されています
-# パーミッション 600（本人のみ読み取り可能）に設定されています
-# .gitignore の対象外です（ホームディレクトリのため）
-
-PROXY_PORT=${port}
-ANTHROPIC_API_KEY_REAL=${anthropic_key}
-OPENAI_API_KEY_REAL=${openai_key}
-GOOGLE_API_KEY_REAL=${google_key}
-EOF
+  {
+    echo "# llm-proxy 設定ファイル"
+    echo "# このファイルは $CONFIG_DIR に保存されています"
+    echo "# パーミッション 600（本人のみ読み取り可能）に設定されています"
+    echo ""
+    echo "PROXY_PORT=${port}"
+    for svc in "${SERVICES[@]}"; do
+      local env_var
+      env_var=$(svc_env "$svc")
+      echo "${env_var}=${new_keys[$env_var]:-}"
+    done
+  } > "$CONFIG_FILE"
   chmod 600 "$CONFIG_FILE"
 
-  # LiteLLM設定を生成
+  # 変数を現在のシェルに反映してからLiteLLM設定を生成
   PROXY_PORT="$port"
-  ANTHROPIC_API_KEY_REAL="$anthropic_key"
-  OPENAI_API_KEY_REAL="$openai_key"
-  GOOGLE_API_KEY_REAL="$google_key"
+  for svc in "${SERVICES[@]}"; do
+    local env_var
+    env_var=$(svc_env "$svc")
+    export "${env_var}=${new_keys[$env_var]:-}"
+  done
   generate_litellm_config
 
   success "設定を保存しました: $CONFIG_FILE"
@@ -317,20 +294,16 @@ cmd_start() {
     exit 1
   fi
 
-  # LiteLLM設定ファイルを再生成（キーが更新されていることもあるため）
   generate_litellm_config
 
   local port="${PROXY_PORT:-$DEFAULT_PORT}"
-
   info "プロキシを起動中... (Port: $port)"
 
-  # バックグラウンドで起動
   nohup litellm --config "$LITELLM_CONFIG" --port "$port" \
     > "$LOG_FILE" 2>&1 &
   local pid=$!
   echo "$pid" > "$PID_FILE"
 
-  # 起動確認（最大10秒待つ）
   local max_wait=10
   local waited=0
   while [ $waited -lt $max_wait ]; do
@@ -346,14 +319,12 @@ cmd_start() {
   done
   echo ""
 
-  # 起動失敗した場合
   if ! is_running; then
     error "プロキシの起動に失敗しました。ログを確認してください："
     echo "  cat $LOG_FILE"
     exit 1
   fi
 
-  # プロセスは生きているが /health が応答しない場合も成功扱い
   success "プロキシが起動しました (PID: $pid)"
   echo ""
   cmd_env
@@ -398,8 +369,6 @@ cmd_status() {
     local pid
     pid=$(cat "$PID_FILE")
     success "起動中 (PID: $pid, Port: $port)"
-
-    # ヘルスチェック
     if curl -s "http://localhost:$port/health" &>/dev/null; then
       success "ヘルスチェック: 正常"
     else
@@ -417,18 +386,19 @@ cmd_status() {
   if [ -f "$CONFIG_FILE" ]; then
     echo ""
     echo "登録済みAPIキー:"
-    if [ -n "${ANTHROPIC_API_KEY_REAL:-}" ]; then
-      local masked="${ANTHROPIC_API_KEY_REAL:0:10}...${ANTHROPIC_API_KEY_REAL: -4}"
-      echo "  Anthropic: $masked"
-    fi
-    if [ -n "${OPENAI_API_KEY_REAL:-}" ]; then
-      local masked="${OPENAI_API_KEY_REAL:0:7}...${OPENAI_API_KEY_REAL: -4}"
-      echo "  OpenAI:    $masked"
-    fi
-    if [ -n "${GOOGLE_API_KEY_REAL:-}" ]; then
-      local masked="${GOOGLE_API_KEY_REAL:0:7}...${GOOGLE_API_KEY_REAL: -4}"
-      echo "  Google:    $masked"
-    fi
+    local found=0
+    for svc in "${SERVICES[@]}"; do
+      local env_var name
+      env_var=$(svc_env "$svc")
+      name=$(svc_name "$svc")
+      local val="${!env_var:-}"
+      if [ -n "$val" ]; then
+        local masked="${val:0:8}...${val: -4}"
+        printf "  %-28s %s\n" "${name}:" "$masked"
+        found=1
+      fi
+    done
+    [ "$found" -eq 0 ] && echo "  （なし）"
   fi
 }
 
@@ -455,6 +425,39 @@ cmd_env() {
   echo ""
   echo -e "${BOLD}重要：${RESET} .env ファイルや .claude ファイルには本物のAPIキーを書かないでください。"
   echo "         ダミーキー（${DUMMY_API_KEY}）のみ使用します。"
+}
+
+# ============================================================
+# コマンド: services
+# ============================================================
+cmd_services() {
+  load_config
+
+  header "対応サービス一覧"
+  echo ""
+  printf "  %-4s %-28s %-16s %s\n" "状態" "サービス" "変数名" "登録モデル数"
+  echo "  ──────────────────────────────────────────────────────────"
+
+  for svc in "${SERVICES[@]}"; do
+    local env_var name models_str
+    env_var=$(svc_env "$svc")
+    name=$(svc_name "$svc")
+    models_str=$(svc_models "$svc")
+    local val="${!env_var:-}"
+
+    # モデル数を数える
+    local model_count
+    model_count=$(echo "$models_str" | tr ',' '\n' | wc -l | tr -d ' ')
+
+    if [ -n "$val" ]; then
+      printf "  ${GREEN}[ON] ${RESET} %-28s %-16s %s モデル\n" "$name" "$env_var" "$model_count"
+    else
+      printf "  ${YELLOW}[--] ${RESET} %-28s %-16s %s モデル\n" "$name" "$env_var" "$model_count"
+    fi
+  done
+
+  echo ""
+  info "キーを追加・変更するには: llm-proxy init"
 }
 
 # ============================================================
@@ -485,9 +488,14 @@ ${BOLD}コマンド:${RESET}
   stop      プロキシを停止する
   restart   プロキシを再起動する
   status    プロキシの状態を確認する
+  services  対応サービスの一覧と登録状態を確認する
   env       設定すべき環境変数を表示する
   logs      プロキシのログをリアルタイムで表示する
   help      このヘルプを表示する
+
+${BOLD}対応サービス:${RESET}
+  Anthropic (Claude) / OpenAI (GPT) / Google (Gemini) / xAI (Grok)
+  Mistral AI / Cohere / DeepSeek / Groq / Perplexity / Together AI
 
 ${BOLD}はじめかた:${RESET}
   1. llm-proxy init    # APIキーを設定
@@ -512,13 +520,14 @@ main() {
   shift || true
 
   case "$cmd" in
-    init)    cmd_init "$@" ;;
-    start)   cmd_start "$@" ;;
-    stop)    cmd_stop "$@" ;;
-    restart) cmd_restart "$@" ;;
-    status)  cmd_status "$@" ;;
-    env)     cmd_env "$@" ;;
-    logs)    cmd_logs "$@" ;;
+    init)     cmd_init "$@" ;;
+    start)    cmd_start "$@" ;;
+    stop)     cmd_stop "$@" ;;
+    restart)  cmd_restart "$@" ;;
+    status)   cmd_status "$@" ;;
+    services) cmd_services "$@" ;;
+    env)      cmd_env "$@" ;;
+    logs)     cmd_logs "$@" ;;
     help|--help|-h) cmd_help ;;
     *)
       error "不明なコマンド: $cmd"
