@@ -28,22 +28,15 @@ echo ""
 # インストール先ディレクトリを作成
 mkdir -p "$INSTALL_DIR"
 
-# ローカルインストール（このスクリプトがリポジトリ内で実行される場合）
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/llm-proxy" ]; then
-  info "ローカルファイルからインストールします..."
-  cp "$SCRIPT_DIR/llm-proxy" "$INSTALL_DIR/$SCRIPT_NAME"
+# GitHubから最新版をダウンロード
+info "llm-proxy の最新版をダウンロード中..."
+if command -v curl &>/dev/null; then
+  curl -fsSL "$SCRIPT_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
+elif command -v wget &>/dev/null; then
+  wget -q "$SCRIPT_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
 else
-  # リモートからダウンロード
-  info "llm-proxyをダウンロード中..."
-  if command -v curl &>/dev/null; then
-    curl -fsSL "$SCRIPT_URL" -o "$INSTALL_DIR/$SCRIPT_NAME"
-  elif command -v wget &>/dev/null; then
-    wget -q "$SCRIPT_URL" -O "$INSTALL_DIR/$SCRIPT_NAME"
-  else
-    error "curl または wget が必要です。"
-    exit 1
-  fi
+  error "curl または wget が必要です。"
+  exit 1
 fi
 
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
