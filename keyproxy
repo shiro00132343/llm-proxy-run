@@ -631,7 +631,7 @@ cmd_services() {
 # コマンド: update
 # ============================================================
 cmd_update() {
-  local repo="shiro00132343/llm-proxy-run"
+  local repo="shiro00132343/keyproxy"
   local install_path
   install_path="$(command -v keyproxy)"
 

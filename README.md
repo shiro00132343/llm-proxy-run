@@ -3,7 +3,7 @@
 **[日本語](#日本語) | [English](#english)**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-brightgreen)](https://github.com/shiro00132343/llm-proxy-run)
+[![Open Source](https://img.shields.io/badge/Open%20Source-%E2%9D%A4-brightgreen)](https://github.com/shiro00132343/keyproxy)
 
 > このプロジェクトはオープンソースです。誰でも無料で使用・改変・配布できます。
 > This project is open source. Free to use, modify, and distribute by anyone.
@@ -52,7 +52,7 @@ Macの場合：
 ### ステップ2：以下をコピーして貼り付けて、Enterを押す
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/shiro00132343/llm-proxy-run/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shiro00132343/keyproxy/main/install.sh | bash
 ```
 
 > ターミナルに文字を貼り付けるときは `Command（⌘）+ V` です。
@@ -470,7 +470,7 @@ On Mac:
 ### Step 2: Copy, paste, and press Enter
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/shiro00132343/llm-proxy-run/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shiro00132343/keyproxy/main/install.sh | bash
 ```
 
 > Paste in Terminal with `Command (⌘) + V`.
@@ -836,4 +836,4 @@ MIT License — Free to use, modify, and distribute.
 ## Contributing
 
 Pull requests and issues are welcome!
-[https://github.com/shiro00132343/llm-proxy-run](https://github.com/shiro00132343/llm-proxy-run)
+[https://github.com/shiro00132343/keyproxy](https://github.com/shiro00132343/keyproxy)

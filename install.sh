@@ -5,13 +5,13 @@
 set -euo pipefail
 
 INSTALL_DIR="$HOME/.local/bin"
-SCRIPT_URL="https://raw.githubusercontent.com/shiro00132343/llm-proxy-run/main/keyproxy"
+SCRIPT_URL="https://raw.githubusercontent.com/shiro00132343/keyproxy/main/keyproxy"
 # キャッシュバイパス用（GitHub API経由で最新コミットのSHAを取得してURLを構築）
 _get_latest_url() {
   local sha
-  sha=$(curl -fsSL "https://api.github.com/repos/shiro00132343/llm-proxy-run/commits/main" 2>/dev/null | grep '"sha"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
+  sha=$(curl -fsSL "https://api.github.com/repos/shiro00132343/keyproxy/commits/main" 2>/dev/null | grep '"sha"' | head -1 | sed 's/.*"sha": *"\([^"]*\)".*/\1/')
   if [ -n "$sha" ]; then
-    echo "https://raw.githubusercontent.com/shiro00132343/llm-proxy-run/${sha}/keyproxy"
+    echo "https://raw.githubusercontent.com/shiro00132343/keyproxy/${sha}/keyproxy"
   else
     echo "$SCRIPT_URL"
   fi
