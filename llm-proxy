@@ -186,6 +186,34 @@ YAML
 }
 
 # ============================================================
+# init ヘルパー: サービス名を環境変数名に変換
+# 例: "Anthropic" -> "ANTHROPIC_API_KEY_REAL"
+#     "my service" -> "MY_SERVICE_API_KEY_REAL"
+# ============================================================
+_name_to_env_var() {
+  local name="$1"
+  printf '%s' "$name" | tr 'a-z' 'A-Z' | tr -cs 'A-Z0-9' '_' | sed 's/^_*//' | sed 's/_*$//' | awk '{print $0"_API_KEY_REAL"}'
+}
+
+# 登録済みAPIキーを番号付きで表示（作業用tmpファイルから読む）
+_show_registered_keys_numbered() {
+  local file="$1"
+  echo "登録済みのAPIキー:"
+  if [ ! -s "$file" ]; then
+    echo "  (なし)"
+    return
+  fi
+  local n=0
+  while IFS='=' read -r key val; do
+    [ -z "$key" ] && continue
+    n=$((n + 1))
+    local svc_display="${key%_API_KEY_REAL}"
+    local masked="${val:0:8}...${val: -4}"
+    echo "  $n. $svc_display: $masked"
+  done < "$file"
+}
+
+# ============================================================
 # コマンド: init
 # ============================================================
 cmd_init() {
@@ -203,46 +231,74 @@ cmd_init() {
   read -r input_port
   local port="${input_port:-$current_port}"
 
-  echo ""
-  echo "設定するAPIキーを入力してください。"
-  echo "不要なサービスはそのままEnterでスキップできます。"
-  echo ""
-
-  # 各サービスのキーを収集して一時ファイルに保存（bash 3.2 互換）
+  # 既存キーを作業用tmpファイルにコピー
   local tmp_keys
   tmp_keys=$(mktemp)
+  if [ -f "$CONFIG_FILE" ]; then
+    grep '_API_KEY_REAL=' "$CONFIG_FILE" >> "$tmp_keys" || true
+  fi
 
-  for svc in "${SERVICES[@]}"; do
-    local env_var name example
-    env_var=$(svc_env "$svc")
-    name=$(svc_name "$svc")
-    example=$(svc_example "$svc")
+  # メインループ: 追加・更新・削除
+  while true; do
+    echo ""
+    _show_registered_keys_numbered "$tmp_keys"
+    echo ""
+    echo "操作: サービス名を入力して追加・更新 / [d 番号] で削除 / [Enter] で完了"
+    echo -n "> "
+    read -r user_input
+
+    # 空Enter → 完了
+    [ -z "$user_input" ] && break
+
+    # "d N" → 削除
+    if echo "$user_input" | grep -qE '^d [0-9]+$'; then
+      local del_num="${user_input#d }"
+      local del_key
+      del_key=$(sed -n "${del_num}p" "$tmp_keys" | cut -d= -f1)
+      if [ -n "$del_key" ]; then
+        local tmp2
+        tmp2=$(mktemp)
+        grep -v "^${del_key}=" "$tmp_keys" > "$tmp2" || true
+        mv "$tmp2" "$tmp_keys"
+        local svc_display="${del_key%_API_KEY_REAL}"
+        success "$svc_display を削除しました"
+      else
+        warn "番号 $del_num は存在しません"
+      fi
+      continue
+    fi
+
+    # それ以外 → サービス名として追加・更新
+    local svc_name="$user_input"
+    local env_var
+    env_var=$(_name_to_env_var "$svc_name")
+
     local current_val
-    current_val="$(eval "echo \"\${${env_var}:-}\"")"
+    current_val=$(grep "^${env_var}=" "$tmp_keys" 2>/dev/null | tail -1 | cut -d= -f2- || true)
 
-    echo -e "${BOLD}${name}${RESET}"
     if [ -n "$current_val" ]; then
       local masked="${current_val:0:8}...${current_val: -4}"
       echo "  現在の値: $masked"
-      echo -n "  新しいキー（変更しない場合はEnter）: "
+      echo -n "  新しいAPIキー (変更しない場合はEnter): "
     else
-      echo -n "  APIキー (例: ${example}) [スキップする場合はEnter]: "
+      echo -n "  APIキー: "
     fi
     read -r -s input_key
     echo ""
+
     local new_val="${input_key:-$current_val}"
-    echo "${env_var}=${new_val}" >> "$tmp_keys"
+    if [ -n "$new_val" ]; then
+      local tmp2
+      tmp2=$(mktemp)
+      grep -v "^${env_var}=" "$tmp_keys" > "$tmp2" || true
+      echo "${env_var}=${new_val}" >> "$tmp2"
+      mv "$tmp2" "$tmp_keys"
+      success "$svc_name を保存しました"
+    fi
   done
 
   # 1つも設定されていない場合はエラー
-  local any_set=0
-  while IFS='=' read -r k v; do
-    if [ -n "$v" ]; then
-      any_set=1
-      break
-    fi
-  done < "$tmp_keys"
-  if [ "$any_set" -eq 0 ]; then
+  if [ ! -s "$tmp_keys" ]; then
     rm -f "$tmp_keys"
     error "少なくとも1つのAPIキーを設定してください。"
     exit 1
@@ -260,7 +316,6 @@ cmd_init() {
   chmod 600 "$CONFIG_FILE"
   rm -f "$tmp_keys"
 
-  # 変数を現在のシェルに反映してからLiteLLM設定を生成
   PROXY_PORT="$port"
   load_config
   generate_litellm_config
