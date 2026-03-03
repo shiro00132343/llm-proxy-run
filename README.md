@@ -244,6 +244,86 @@ llm-proxy start
 
 ---
 
+## コードからの使い方
+
+llm-proxy が起動していれば、コードには**ダミーキーを書くだけ**です。本物のキーへの差し替えは llm-proxy が自動でやります。
+
+### .env ファイルを使う場合
+
+```env
+# .env（Gitにコミットしても安全）
+ANTHROPIC_BASE_URL=http://localhost:4000
+ANTHROPIC_API_KEY=sk-dummy-safe-proxy-key-0000
+```
+
+### Python（Anthropic SDK）
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="sk-dummy-safe-proxy-key-0000",
+    base_url="http://localhost:4000",
+)
+
+message = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+print(message.content)
+```
+
+.env ファイルから自動で読み込む場合（`pip install python-dotenv`）：
+
+```python
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()  # .env を読み込む
+
+client = anthropic.Anthropic()  # 環境変数から自動で読まれる
+
+message = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+print(message.content)
+```
+
+### Python（OpenAI SDK）
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-dummy-safe-proxy-key-0000",
+    base_url="http://localhost:4000",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "こんにちは"}],
+)
+print(response.choices[0].message.content)
+```
+
+### Docker Compose
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    environment:
+      - ANTHROPIC_BASE_URL=http://host.docker.internal:4000
+      - ANTHROPIC_API_KEY=sk-dummy-safe-proxy-key-0000
+```
+
+> Docker の場合は `localhost` の代わりに `host.docker.internal` を使います（Mac/Windows）。
+
+---
+
 ## 困ったときは
 
 ### 「llm-proxy: command not found」と表示された
@@ -536,6 +616,86 @@ The following services have built-in model routing and work out of the box:
 | Together | Open-source model hosting |
 
 Any other service can also be registered — just enter the service name and API key in `llm-proxy init`.
+
+---
+
+## Using llm-proxy in your code
+
+As long as llm-proxy is running, just use the **dummy key** in your code. llm-proxy automatically swaps it for your real key.
+
+### .env file
+
+```env
+# .env (safe to commit to Git)
+ANTHROPIC_BASE_URL=http://localhost:4000
+ANTHROPIC_API_KEY=sk-dummy-safe-proxy-key-0000
+```
+
+### Python (Anthropic SDK)
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="sk-dummy-safe-proxy-key-0000",
+    base_url="http://localhost:4000",
+)
+
+message = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content)
+```
+
+Or load from `.env` automatically (`pip install python-dotenv`):
+
+```python
+from dotenv import load_dotenv
+import anthropic
+
+load_dotenv()  # reads .env
+
+client = anthropic.Anthropic()  # picks up env vars automatically
+
+message = client.messages.create(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content)
+```
+
+### Python (OpenAI SDK)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-dummy-safe-proxy-key-0000",
+    base_url="http://localhost:4000",
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+### Docker Compose
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    environment:
+      - ANTHROPIC_BASE_URL=http://host.docker.internal:4000
+      - ANTHROPIC_API_KEY=sk-dummy-safe-proxy-key-0000
+```
+
+> On Mac/Windows Docker, use `host.docker.internal` instead of `localhost`.
 
 ---
 
