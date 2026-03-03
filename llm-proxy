@@ -198,11 +198,13 @@ YAML
       [ -z "$base_url" ] && continue
       [ -z "$model_name" ] && continue
 
-      local display_name
+      local display_name safe_model_name
       display_name=$(echo "$prefix" | tr 'A-Z' 'a-z')
+      # コロンはLiteLLMのmodel_nameで使えないためハイフンに置換
+      safe_model_name=$(echo "$model_name" | tr ':' '-')
 
       cat >> "$LITELLM_CONFIG" << YAML
-  - model_name: ${display_name}/${model_name}
+  - model_name: ${display_name}/${safe_model_name}
     litellm_params:
       model: openai/${model_name}
       api_key: "${val}"

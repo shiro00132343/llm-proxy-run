@@ -240,7 +240,36 @@ llm-proxy start
 | Perplexity | ネット検索付きAIに対応 |
 | Together | オープンソースモデルに対応 |
 
-上記以外のサービスも `llm-proxy init` でサービス名とAPIキーを入力するだけで登録・保管できます。
+上記以外のサービスも `llm-proxy init` でサービス名とAPIキーを入力するだけで登録できます。
+
+### OpenRouterなど「カスタムサービス」の登録方法
+
+上記一覧にないサービスは、`llm-proxy init` で登録するときにベースURLとモデル名も聞かれます。
+
+例：OpenRouterの場合
+
+```
+> OpenRouter
+  APIキー: ****
+  ベースURL: https://openrouter.ai/api/v1
+  モデル名（例: meta-llama/llama-3.2-3b-instruct:free）: google/gemma-3-4b-it:free
+  [OK] OpenRouter を保存しました
+```
+
+登録後、プロキシ経由で呼び出すときのモデル名は `サービス名/モデル名` 形式です。
+**注意：モデル名に含まれる `:` はハイフン `-` に変換されます。**
+
+```bash
+# 例：google/gemma-3-4b-it:free → openrouter/google/gemma-3-4b-it-free
+curl -s http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-dummy-safe-proxy-key-0000" \
+  -d '{
+    "model": "openrouter/google/gemma-3-4b-it-free",
+    "max_tokens": 64,
+    "messages": [{"role": "user", "content": "こんにちは"}]
+  }'
+```
 
 ---
 
@@ -349,6 +378,11 @@ llm-proxy logs
 よくある原因：
 - **Pythonが入っていない** → [python.org](https://www.python.org/downloads/) からインストール
 - **ポートが使用中** → `llm-proxy init` を実行して別の番号（例: 4001）に変える
+- **Apple Silicon Mac（M1/M2/M3）でLiteLLMが起動しない** → 以下を実行して再インストール
+
+```bash
+pip3 install --force-reinstall litellm cffi cryptography uvloop
+```
 
 ### APIキーを変更・追加・削除したい
 
@@ -617,6 +651,35 @@ The following services have built-in model routing and work out of the box:
 
 Any other service can also be registered — just enter the service name and API key in `llm-proxy init`.
 
+### Registering custom services (e.g. OpenRouter)
+
+For services not in the list above, `llm-proxy init` will also ask for a base URL and model name.
+
+Example: OpenRouter
+
+```
+> OpenRouter
+  API key: ****
+  Base URL: https://openrouter.ai/api/v1
+  Model name (e.g. meta-llama/llama-3.2-3b-instruct:free): google/gemma-3-4b-it:free
+  [OK] OpenRouter saved
+```
+
+After registering, call the model using `servicename/modelname` format.
+**Note: colons (`:`) in model names are converted to hyphens (`-`).**
+
+```bash
+# e.g. google/gemma-3-4b-it:free → openrouter/google/gemma-3-4b-it-free
+curl -s http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-dummy-safe-proxy-key-0000" \
+  -d '{
+    "model": "openrouter/google/gemma-3-4b-it-free",
+    "max_tokens": 64,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
 ---
 
 ## Using llm-proxy in your code
@@ -721,6 +784,11 @@ llm-proxy logs
 Common causes:
 - **Python not installed** → Install from [python.org](https://www.python.org/downloads/)
 - **Port already in use** → Run `llm-proxy init` and choose a different port (e.g. 4001)
+- **Apple Silicon Mac (M1/M2/M3): LiteLLM fails to start** → Reinstall with:
+
+```bash
+pip3 install --force-reinstall litellm cffi cryptography uvloop
+```
 
 ### Want to add, update, or delete an API key?
 
